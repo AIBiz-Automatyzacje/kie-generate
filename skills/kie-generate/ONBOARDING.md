@@ -41,23 +41,34 @@ python3 -c "import requests; print(requests.__version__)"
 
 ### 3. Plik `.env` w workspace
 
+**Zasada:** Claude **nie tworzy** i **nie edytuje** pliku `.env`. User sam robi to w swoim edytorze. My tylko checkujemy przez `grep` czy klucze są wypełnione.
+
 **Check:**
 ```bash
 test -f .env && echo "EXISTS" || echo "MISSING"
 ```
 
 - Jeśli istnieje → ✅ "Plik .env znaleziony"
-- Jeśli nie istnieje → utwórz pusty `.env` w root workspace'u (tam gdzie `.obsidian/` lub gdzie user pracuje), poinformuj: "Utworzyłem pusty .env w {ścieżka}"
+- Jeśli nie istnieje → **nie twórz pliku samodzielnie**. Poproś usera:
+
+```
+Brakuje pliku .env w root workspace'u. Utwórz go sam (dowolnym edytorem)
+w lokalizacji: {pwd}/.env
+
+Daj znać jak plik będzie gotowy — wrócę do checkowania.
+```
+
+Pauza, czekaj na potwierdzenie od usera, potem re-check.
 
 ### 4. `KIE_API_KEY`
 
-**Check:**
+**Check:** (sprawdza czy linia istnieje I ma niepustą wartość po `=`)
 ```bash
-grep -q "^KIE_API_KEY=" .env && echo "SET" || echo "MISSING"
+grep -qE "^KIE_API_KEY=.+" .env && echo "SET" || echo "MISSING"
 ```
 
 - Jeśli SET → ✅ "KIE_API_KEY w .env — skip"
-- Jeśli MISSING → **wyświetl userowi:**
+- Jeśli MISSING (brak linii albo pusty placeholder typu `KIE_API_KEY=`) → **wyświetl userowi:**
 
 ```
 Aby zdobyć klucz Kie.ai:
@@ -65,23 +76,24 @@ Aby zdobyć klucz Kie.ai:
 1. Wejdź na https://kie.ai → Sign up (email + hasło)
 2. Dashboard → API Keys → Create API Key
 3. Doładuj konto minimum ~$5 (Nano Banana 2 ≈ $0.01-0.04 za obrazek)
-4. Skopiuj klucz i dodaj do .env:
+4. Otwórz .env w swoim edytorze i dodaj linię (wklej klucz po znaku =):
 
    KIE_API_KEY=sk-xxxxxxxxxxxx
 
-Dodałeś klucz do .env? [tak/nie]
+Zapisz plik. Daj znać jak skończysz — sprawdzę czy klucz jest na miejscu.
 ```
 
-- Po odpowiedzi "tak" → re-check gotowości (`grep` raz jeszcze)
-  - Jeśli klucz jest → ✅ przejdź dalej
-  - Jeśli nadal brak → "Nie widzę klucza. Sprawdź czy zapisałeś .env i czy nazwa to dokładnie `KIE_API_KEY=`"
+- **Nie wypisuj ani nie zapisuj klucza sam** — user robi to ręcznie w `.env`.
+- Po odpowiedzi "gotowe"/"tak" → re-check (`grep` raz jeszcze)
+  - Jeśli SET → ✅ przejdź dalej
+  - Jeśli nadal MISSING → "Nie widzę klucza. Sprawdź czy zapisałeś plik i czy linia ma format `KIE_API_KEY=sk-...` (bez spacji, bez cudzysłowów)"
 - "nie" → zatrzymaj onboarding, poinformuj że user może dokończyć później re-runem
 
 ### 5. `IMGBB_API_KEY`
 
 **Check:**
 ```bash
-grep -q "^IMGBB_API_KEY=" .env && echo "SET" || echo "MISSING"
+grep -qE "^IMGBB_API_KEY=.+" .env && echo "SET" || echo "MISSING"
 ```
 
 - Jeśli SET → ✅ "IMGBB_API_KEY w .env — skip"
@@ -93,14 +105,14 @@ Bez karty, bez konfiguracji, 2 minuty setupu.
 
 1. Wejdź na https://imgbb.com → Sign up (email + hasło)
 2. Wejdź na https://api.imgbb.com → "Get API key" (przycisk pod opisem)
-3. Skopiuj klucz i dodaj do .env:
+3. Otwórz .env w swoim edytorze i dodaj linię (wklej klucz po znaku =):
 
    IMGBB_API_KEY=xxxxxxxxxxxx
 
-Dodałeś klucz do .env? [tak/nie]
+Zapisz plik. Daj znać jak skończysz.
 ```
 
-- Re-check po "tak" (analogicznie do kroku 4)
+- Re-check po "gotowe" (analogicznie do kroku 4). Claude nie edytuje `.env`.
 
 ### 6. Brand rules
 
@@ -202,6 +214,8 @@ Jeśli coś nie zadziała przy pierwszym użyciu:
 ## Czego NIE robić
 
 - ❌ Nie instaluj nic bez pytania usera (`pip install`, `brew install`)
+- ❌ **Nie twórz pliku `.env` za usera** — user sam tworzy w swoim edytorze
+- ❌ **Nie edytuj `.env`** (nie dopisuj, nie zmieniaj, nie zapisuj kluczy za usera) — wszystkie modyfikacje `.env` robi user ręcznie. Claude tylko `grep`-uje żeby sprawdzić czy klucze są wypełnione, nie czyta wartości
 - ❌ Nie robisz realnego calla do Kie.ai ani ImgBB żeby zweryfikować klucze (user sam zobaczy przy pierwszym użyciu)
 - ❌ Nie nadpisuj istniejącego `brand-rules.md` jeśli user nie wybrał "tak"
 - ❌ Nie wypisuj kluczy API na ekran (nawet częściowo) — bezpieczeństwo
