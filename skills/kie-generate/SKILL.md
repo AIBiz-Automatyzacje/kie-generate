@@ -1,12 +1,26 @@
 ---
 name: kie-generate
-description: Generuje grafiki AI przez Kie.ai (Nano Banana 2 / Nano Banana Pro). Interaktywnie pyta o prompt i parametry, zapisuje do Marketing/media/ lub wskazanej lokalizacji.
+description: Generuje grafiki AI przez Kie.ai (Nano Banana 2 / Nano Banana Pro / GPT Image-2). Interaktywnie pyta o prompt i parametry, zapisuje do Marketing/media/ lub wskazanej lokalizacji.
 allowed-tools: ["Bash", "Read", "Write", "Glob"]
 ---
 
 # Kie Generate
 
-Skill do generowania grafik AI przez API Kie.ai. Domyślny model: **Nano Banana 2**. Alternatywnie: Nano Banana Pro (starszy, mniej opcji).
+Skill do generowania grafik AI przez API Kie.ai.
+
+## Wybór modelu
+
+Domyślnie używaj **GPT Image-2** — skrypt automatycznie wybiera wariant text-to-image lub image-to-image w zależności od tego czy podano `--image`.
+
+Przełączaj się tylko gdy user wprost o to poprosi:
+
+| User mówi | Przekaż `--model` |
+|-----------|-------------------|
+| (nic, default) | `gpt-image-2` |
+| "Nano", "Nano Banana", "banana" | `nano-banana-2` |
+| "pro", "wyższa jakość", "lepiej" | `nano-banana-pro` |
+
+**GPT Image-2 ograniczenia:** brak `--resolution` i `--format` (skrypt je ignoruje), krótsza lista ratio (bez 1:4, 1:8, 4:1, 8:1). Jeśli user potrzebuje rozdzielczości lub formatu innego niż domyślne — przełącz na `nano-banana-2`.
 
 ## Wymagania
 
@@ -63,6 +77,10 @@ python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png --ratio 16:9
 # Generate z Nano Banana Pro (starszy model)
 python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png --model nano-banana-pro
 
+# Generate / edit z GPT Image-2 (skrypt sam wybiera text-to-image vs image-to-image)
+python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png --model gpt-image-2 --ratio 16:9
+python3 {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png --model gpt-image-2
+
 # Edit (image + instruction → image)
 python3 {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png
 
@@ -77,12 +95,13 @@ python3 {baseDir}/scripts/kie_image.py remove-bg input.png output.png
 
 | Parametr | Opcje | Domyślnie |
 |----------|-------|-----------|
-| `--model` | nano-banana-2, nano-banana-pro | nano-banana-2 |
+| `--model` | nano-banana-2, nano-banana-pro, gpt-image-2 | nano-banana-2 |
 | `--ratio` | 1:1, 1:4*, 1:8*, 2:3, 3:2, 3:4, 4:1*, 4:3, 4:5, 5:4, 8:1*, 9:16, 16:9, 21:9, auto | 1:1 |
 | `--resolution` | 1K, 2K, 4K | 1K |
 | `--format` | png, jpg | png |
 
 *\* Proporcje 1:4, 1:8, 4:1, 8:1 — dostępne tylko w Nano Banana 2*
+*\* GPT Image-2 ignoruje `--resolution` i `--format`; ratio musi być z listy: auto, 1:1, 5:4, 9:16, 21:9, 16:9, 4:3, 3:2, 4:5, 3:4, 2:3*
 
 ## Proporcje - kiedy które
 

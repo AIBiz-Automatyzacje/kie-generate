@@ -47,9 +47,11 @@ IMGBB_EXPIRATION = 3600  # 1h TTL, Kie.ai pobiera w sekundę
 IMGBB_MAX_SIZE_MB = 32
 
 ASPECT_RATIOS = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9", "auto"]
-MODELS = ["nano-banana-2", "nano-banana-pro"]
+MODELS = ["nano-banana-2", "nano-banana-pro", "gpt-image-2"]
 RESOLUTIONS = ["1K", "2K", "4K"]
 FORMATS = ["png", "jpg"]
+
+GPT_RATIOS = {"auto", "1:1", "5:4", "9:16", "21:9", "16:9", "4:3", "3:2", "4:5", "3:4", "2:3"}
 
 
 def upload_to_imgbb(local_path: str) -> str:
@@ -92,21 +94,44 @@ def upload_to_imgbb(local_path: str) -> str:
     raise Exception(f"ImgBB upload failed after 3 attempts: {last_error}")
 
 
+def resolve_model_id(model: str, has_images: bool) -> str:
+    """User-facing 'gpt-image-2' rozgałęzia się na 2 wewnętrzne ID w zależności od trybu."""
+    if model == "gpt-image-2":
+        return "gpt-image-2-image-to-image" if has_images else "gpt-image-2-text-to-image"
+    return model
+
+
+def build_task_payload(prompt: str, image_urls: list, ratio: str, resolution: str, output_format: str, model: str) -> dict:
+    """Zbuduj payload — GPT Image-2 ma inny schema niż Nano Banana."""
+    if model == "gpt-image-2":
+        if ratio not in GPT_RATIOS:
+            raise Exception(f"GPT Image-2 nie wspiera proporcji '{ratio}'. Dozwolone: {sorted(GPT_RATIOS)}")
+        actual_model = resolve_model_id(model, bool(image_urls))
+        input_payload = {"prompt": prompt, "aspect_ratio": ratio}
+        if image_urls:
+            input_payload["input_urls"] = image_urls
+        return {"model": actual_model, "input": input_payload}
+
+    return {
+        "model": model,
+        "input": {
+            "prompt": prompt,
+            "image_input": image_urls,
+            "aspect_ratio": ratio,
+            "resolution": resolution,
+            "output_format": output_format
+        }
+    }
+
+
 def create_task(prompt: str, image_urls: list, ratio: str, resolution: str, output_format: str, model: str = "nano-banana-2") -> str:
     """Utwórz task generacji, zwróć taskId."""
+    payload = build_task_payload(prompt, image_urls, ratio, resolution, output_format, model)
+
     response = requests.post(
         f"{BASE_URL}/jobs/createTask",
         headers={"Authorization": f"Bearer {KIE_API_KEY}"},
-        json={
-            "model": model,
-            "input": {
-                "prompt": prompt,
-                "image_input": image_urls,
-                "aspect_ratio": ratio,
-                "resolution": resolution,
-                "output_format": output_format
-            }
-        }
+        json=payload
     )
 
     if response.status_code != 200:
@@ -184,7 +209,7 @@ def create_remove_bg_task(image_url: str) -> str:
 def run_generation(prompt: str, output: str, image_urls: list, ratio: str, resolution: str, fmt: str, model: str = "nano-banana-2"):
     """Wspólna logika dla wszystkich trybów."""
     print(f"Creating task...")
-    print(f"  Model: {model}")
+    print(f"  Model: {resolve_model_id(model, bool(image_urls))}")
     print(f"  Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
     print(f"  Ratio: {ratio}, Resolution: {resolution}, Format: {fmt}")
     if image_urls:
@@ -221,7 +246,7 @@ def main():
     gen = subparsers.add_parser("generate", help="Generate image from text prompt")
     gen.add_argument("prompt", help="Text prompt for image generation")
     gen.add_argument("output", help="Output file path (e.g., output.png)")
-    gen.add_argument("--model", default="nano-banana-2", choices=MODELS, help="Model (default: nano-banana-2)")
+    gen.add_argument("--model", default="gpt-image-2", choices=MODELS, help="Model (default: gpt-image-2)")
     gen.add_argument("--ratio", default="1:1", choices=ASPECT_RATIOS, help="Aspect ratio (default: 1:1)")
     gen.add_argument("--resolution", default="1K", choices=RESOLUTIONS, help="Resolution (default: 1K)")
     gen.add_argument("--format", default="png", choices=FORMATS, help="Output format (default: png)")
@@ -231,7 +256,7 @@ def main():
     edit.add_argument("instruction", help="Edit instruction (e.g., 'change background to sunset')")
     edit.add_argument("output", help="Output file path")
     edit.add_argument("--image", required=True, help="Input image to edit")
-    edit.add_argument("--model", default="nano-banana-2", choices=MODELS, help="Model (default: nano-banana-2)")
+    edit.add_argument("--model", default="gpt-image-2", choices=MODELS, help="Model (default: gpt-image-2)")
     edit.add_argument("--ratio", default="auto", choices=ASPECT_RATIOS, help="Aspect ratio (default: auto)")
     edit.add_argument("--resolution", default="1K", choices=RESOLUTIONS, help="Resolution (default: 1K)")
     edit.add_argument("--format", default="png", choices=FORMATS, help="Output format (default: png)")
@@ -241,7 +266,7 @@ def main():
     comp.add_argument("instruction", help="Composition instruction")
     comp.add_argument("output", help="Output file path")
     comp.add_argument("--image", action="append", required=True, dest="images", help="Input images (use multiple times)")
-    comp.add_argument("--model", default="nano-banana-2", choices=MODELS, help="Model (default: nano-banana-2)")
+    comp.add_argument("--model", default="gpt-image-2", choices=MODELS, help="Model (default: gpt-image-2)")
     comp.add_argument("--ratio", default="1:1", choices=ASPECT_RATIOS, help="Aspect ratio (default: 1:1)")
     comp.add_argument("--resolution", default="1K", choices=RESOLUTIONS, help="Resolution (default: 1K)")
     comp.add_argument("--format", default="png", choices=FORMATS, help="Output format (default: png)")
