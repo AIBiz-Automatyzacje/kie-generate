@@ -1,13 +1,15 @@
 """
-Shared .env loader — działa lokalnie i na VPS (symlink .claude → vault-git/.claude).
+Self-contained .env loader — kopia w każdym skillu (NIE importuje z `_shared/`).
 
-Usage:
+Działa lokalnie i na serwerze (odporne na symlink katalogu `.claude`).
+
+Usage (z `scripts/your_script.py`):
     from pathlib import Path
     import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_shared"))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from env_loader import find_workspace, load_env
 
-    WORKSPACE = find_workspace()
+    WORKSPACE = find_workspace(script_path=__file__)
     load_env(WORKSPACE)
 """
 

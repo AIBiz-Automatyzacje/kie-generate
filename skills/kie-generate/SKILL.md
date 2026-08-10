@@ -1,6 +1,6 @@
 ---
 name: kie-generate
-description: Generuje grafiki AI przez Kie.ai (Nano Banana 2 / Nano Banana Pro / GPT Image-2). Interaktywnie pyta o prompt i parametry, zapisuje do Marketing/media/ lub wskazanej lokalizacji.
+description: Generuje grafiki I WIDEO AI przez Kie.ai — grafiki (Nano Banana 2 / Nano Banana Pro / GPT Image-2) oraz wideo/animacje czterema silnikami do wyboru i porównania (Kling 3.0, Seedance 2.0, Seedance 2.5 do 30 s, MiniMax H3; text-to-video i image-to-video z first/end frame). Używaj gdy user chce wygenerować grafikę, obrazek, wideo, animację, klip, rolkę AI, ożywić grafikę, zrobić seamless loop, animować postać/pixel-art albo porównać kilka modeli wideo na tym samym promptcie. Interaktywnie pyta o prompt i parametry, zapisuje do Marketing/media/ lub wskazanej lokalizacji.
 allowed-tools: ["Bash", "Read", "Write", "Glob"]
 ---
 
@@ -69,33 +69,38 @@ Biblioteki Python: `requests`.
 
 ## Użycie skryptu
 
+> **Cross-platform Python:** Przed uruchomieniem skryptów ustaw interpreter (na Windows `python3` to stub ze Sklepu Microsoft):
+> ```bash
+> PYTHON=$(command -v python3 || command -v python)
+> ```
+
 ```bash
-# Generate (text → image) — domyślnie Nano Banana 2
-python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png
-python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png --ratio 16:9 --resolution 2K
+# Generate (text → image) — domyślnie GPT Image-2
+$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png
+$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --ratio 16:9 --resolution 2K
 
 # Generate z Nano Banana Pro (starszy model)
-python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png --model nano-banana-pro
+$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --model nano-banana-pro
 
 # Generate / edit z GPT Image-2 (skrypt sam wybiera text-to-image vs image-to-image)
-python3 {baseDir}/scripts/kie_image.py generate "prompt" output.png --model gpt-image-2 --ratio 16:9
-python3 {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png --model gpt-image-2
+$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --model gpt-image-2 --ratio 16:9
+$PYTHON {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png --model gpt-image-2
 
 # Edit (image + instruction → image)
-python3 {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png
+$PYTHON {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png
 
 # Compose (multiple images → image)
-python3 {baseDir}/scripts/kie_image.py compose "instruction" output.png --image img1.png --image img2.png
+$PYTHON {baseDir}/scripts/kie_image.py compose "instruction" output.png --image img1.png --image img2.png
 
 # Remove background
-python3 {baseDir}/scripts/kie_image.py remove-bg input.png output.png
+$PYTHON {baseDir}/scripts/kie_image.py remove-bg input.png output.png
 ```
 
 ## Parametry
 
 | Parametr | Opcje | Domyślnie |
 |----------|-------|-----------|
-| `--model` | nano-banana-2, nano-banana-pro, gpt-image-2 | nano-banana-2 |
+| `--model` | nano-banana-2, nano-banana-pro, gpt-image-2 | gpt-image-2 |
 | `--ratio` | 1:1, 1:4*, 1:8*, 2:3, 3:2, 3:4, 4:1*, 4:3, 4:5, 5:4, 8:1*, 9:16, 16:9, 21:9, auto | 1:1 |
 | `--resolution` | 1K, 2K, 4K | 1K |
 | `--format` | png, jpg | png |
@@ -139,6 +144,99 @@ Dla trybów `edit`, `compose`, `remove-bg` Kie.ai wymaga publicznego URL-a dla i
 | `IMGBB_API_KEY not configured` | Dodaj klucz do `.env` (imgbb.com/api) |
 | `File too large: X MB (limit 32 MB)` | Skompresuj lub zmniejsz rozdzielczość przed uploadem |
 | `ImgBB upload failed after 3 attempts` | Problem sieci/API ImgBB — spróbuj ponownie za chwilę |
+
+---
+
+## Wideo — Kling 3.0 · Seedance 2.0 · Seedance 2.5 · MiniMax H3
+
+Do generowania wideo i animacji służy osobny skrypt `scripts/kie_video.py` (ten sam flow API co grafiki: createTask → recordInfo → download). Wymaga tylko `KIE_API_KEY` — obrazy wejściowe uploaduje przez natywny magazyn kie.ai (nie ImgBB).
+
+Cztery silniki za jednym interfejsem — po to, żeby ten sam prompt puścić kilkoma modelami i porównać wynik:
+
+| `--model` | Model w API | Sterowanie jakością | Dźwięk | Uwagi |
+|-----------|-------------|---------------------|--------|-------|
+| `kling` (default) | `kling-3.0/video` | `--mode std/pro/4K` | tak | 3-15 s, aspect 16:9 / 9:16 / 1:1 |
+| `seedance` | `bytedance/seedance-2` | `--resolution 480p/720p/1080p/4k` | tak | 4-15 s, aspect też 4:3, 21:9, `adaptive` |
+| `seedance25` | `bytedance/seedance-2-5` | `--resolution 480p/720p` | tak | **4-30 s** — jedyny silnik z klipami dłuższymi niż 15 s; aspect domyślnie `adaptive`, obraz do 30 MB. Cena beta: 720p ~$0.315/s bez wideo wejściowego |
+| `minimax` | `minimax-h3/image-to-video`<br>`minimax-h3/text-to-video` | `--resolution 768P/2K` | nie | 4-15 s, obraz do 30 MB; **i2v nie przyjmuje `--aspect-ratio`** (kadr bierze z klatki) |
+
+`kie_video.py models` wypisuje tę ściągę w terminalu, bez wywoływania API.
+
+Skrypt waliduje kombinacje przed wysłaniem taska — `--mode` przy Seedance, `--resolution` przy Klingu czy `--sound` przy MiniMaksie kończą się czytelnym błędem, a nie spalonym zleceniem. Różnice, które builder ukrywa: Kling bierze klatki jako listę `image_urls`, pozostałe dwa jako osobne `first_frame_url` / `last_frame_url`; `duration` to string w Klingu, a integer w reszcie.
+
+**Porównanie silników na jednym promptcie:**
+
+```bash
+for M in kling seedance seedance25 minimax; do
+  $PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out_$M.mp4 \
+    --model $M --first sprite.png --end sprite.png --duration 5 &
+done; wait
+```
+
+### Kiedy używać
+
+| User mówi | Komenda |
+|-----------|---------|
+| "wygeneruj wideo", "zrób klip", opis sceny bez obrazka | `generate` (text-to-video) |
+| "ożyw tę grafikę", "animuj postać", ma obraz startowy | `image-to-video` |
+| "seamless loop", "zapętlona animacja pixel-art" | `image-to-video` z `--first` = `--end` (ten sam plik) |
+| "długi klip", "wideo powyżej 15 sekund" | `--model seedance25 --duration 16-30` (jedyny silnik z takim zakresem) |
+| "porównaj modele", "zrób to drugim modelem", "który silnik lepszy" | ta sama komenda z różnym `--model` |
+| "jakie mamy modele wideo" | `models` |
+| polling się urwał, mam task_id | `recover` |
+
+### Komendy
+
+> Ustaw interpreter jak przy grafikach: `PYTHON=$(command -v python3 || command -v python)`
+
+```bash
+# Lista silników i ich parametrów (bez wywołania API)
+$PYTHON {baseDir}/scripts/kie_video.py models
+
+# Text → video
+$PYTHON {baseDir}/scripts/kie_video.py generate "prompt sceny" out.mp4 --duration 5 --aspect-ratio 16:9
+$PYTHON {baseDir}/scripts/kie_video.py generate "prompt sceny" out.mp4 --model seedance --resolution 1080p
+$PYTHON {baseDir}/scripts/kie_video.py generate "prompt sceny" out.mp4 --model seedance25 --duration 20
+
+# Image → video: first frame + opcjonalny end frame
+$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --first frame.png
+$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --first start.png --end koniec.png
+$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --model minimax --first start.png --resolution 2K
+
+# Odzysk po przerwanym pollingu (NIE płacisz drugi raz)
+$PYTHON {baseDir}/scripts/kie_video.py recover <task_id> out.mp4
+```
+
+### Parametry wideo
+
+| Parametr | Opcje | Domyślnie |
+|----------|-------|-----------|
+| `--model` | kling, seedance, seedance25, minimax | kling |
+| `--duration` | 3–15 s (Kling) · 4–15 s (Seedance 2.0, MiniMax) · 4–30 s (Seedance 2.5) | 5 |
+| `--aspect-ratio` | zależnie od silnika — patrz tabela wyżej | 16:9 (generate) / brak (image-to-video) |
+| `--resolution` | Seedance 2.0: 480p/720p/1080p/4k · Seedance 2.5: 480p/720p · MiniMax: 768P/2K | 720p / 2K |
+| `--mode` | **tylko Kling:** std (720p), pro (1080p), 4K | std |
+| `--sound` | flaga — Kling i oba Seedance (MiniMax nie generuje dźwięku) | off |
+
+### Jak działa image_urls (first / end frame)
+
+W trybie single-shot: `--first` = klatka początkowa (index 0), `--end` = klatka końcowa (index 1). Przy podanych obrazach Kling auto-adaptuje kadr z klatki, więc `--aspect-ratio` jest miękką sugestią. Obrazy: **JPG/PNG, max 10 MB**. Plik z rozszerzeniem `.png`, który w środku jest WebP (RIFF), jest automatycznie konwertowany ffmpeg-iem do prawdziwego PNG z zachowaniem alpha.
+
+### Główny use case: animacja pixel-art (seamless loop)
+
+Animacje postaci do aplikacji mobilnej — keyframe 1024×1024 (1:1), ten sam plik jako first i end frame daje płynną zapętloną animację:
+
+```bash
+$PYTHON {baseDir}/scripts/kie_video.py image-to-video \
+  "pixel-art egg character, subtle idle bounce animation, seamless loop, retro game sprite" \
+  egg_idle_loop.mp4 --first egg.png --end egg.png --duration 5 --aspect-ratio 1:1 --mode std
+```
+
+### Ważne o wideo
+
+- **Rendery są WOLNE.** Polling ma budżet 40 min. `task_id` leci na stdout NATYCHMIAST po createTask (linia `>>> RECOVERY: ...`) — jeśli proces padnie, odzyskaj wynik komendą `recover` bez ponownej płatności.
+- **Ceny (orientacyjnie):** std ~27 kredytów/s, 4K ~30 kredytów/s → wideo 5s std ≈ 135 kredytów. Nieudane taski nie zjadają kredytów.
+- Uruchamiaj generację wideo w tle (`run_in_background`) albo z dużym timeoutem — nie blokuj sesji na 40 min.
 
 ---
 
