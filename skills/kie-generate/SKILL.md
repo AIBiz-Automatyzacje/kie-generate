@@ -1,6 +1,6 @@
 ---
 name: kie-generate
-description: Generuje grafiki I WIDEO AI przez Kie.ai — grafiki (Nano Banana 2 / Nano Banana Pro / GPT Image-2) oraz wideo/animacje czterema silnikami do wyboru i porównania (Kling 3.0, Seedance 2.0, Seedance 2.5 do 30 s, MiniMax H3; text-to-video i image-to-video z first/end frame). Używaj gdy user chce wygenerować grafikę, obrazek, wideo, animację, klip, rolkę AI, ożywić grafikę, zrobić seamless loop, animować postać/pixel-art albo porównać kilka modeli wideo na tym samym promptcie. Interaktywnie pyta o prompt i parametry, zapisuje do Marketing/media/ lub wskazanej lokalizacji.
+description: Generuje grafiki I WIDEO AI przez Kie.ai — grafiki (Nano Banana 2 / Nano Banana Pro / GPT Image 2.5) oraz wideo/animacje czterema silnikami do wyboru i porównania (Kling 3.0, Seedance 2.0, Seedance 2.5 do 30 s, MiniMax H3; text-to-video i image-to-video z first/end frame). Używaj gdy user chce wygenerować grafikę, obrazek, wideo, animację, klip, rolkę AI, ożywić grafikę, zrobić seamless loop, animować postać/pixel-art albo porównać kilka modeli wideo na tym samym promptcie. Interaktywnie pyta o prompt i parametry, zapisuje do Marketing/media/ lub wskazanej lokalizacji.
 allowed-tools: ["Bash", "Read", "Write", "Glob"]
 ---
 
@@ -10,17 +10,18 @@ Skill do generowania grafik AI przez API Kie.ai.
 
 ## Wybór modelu
 
-Domyślnie używaj **GPT Image-2** — skrypt automatycznie wybiera wariant text-to-image lub image-to-image w zależności od tego czy podano `--image`.
+Domyślnie używaj **GPT Image 2.5 Sunburst** (`gpt-image-2.5` → `gpt-image-2-5-sunburst-*` w API Kie) — wariant „optimized for quality”, wyższa jakość niż GPT Image 2, ta sama cena co Flare, wolniejszy. Skrypt automatycznie wybiera text-to-image lub image-to-image w zależności od tego czy podano `--image`. **Flare** (`gpt-image-2.5-flare`) to mniejszy, szybszy wariant o jakości GPT Image 2 — używaj tylko gdy user prosi o szybkość albo robi wiele iteracji roboczych. GPT Image-2 (2.0) wycofany 15.09.2026.
 
 Przełączaj się tylko gdy user wprost o to poprosi:
 
 | User mówi | Przekaż `--model` |
 |-----------|-------------------|
-| (nic, default) | `gpt-image-2` |
+| (nic, default) | `gpt-image-2.5` (Sunburst) |
+| "flare", "szybko", "szybszy model", "robocza wersja" | `gpt-image-2.5-flare` |
 | "Nano", "Nano Banana", "banana" | `nano-banana-2` |
 | "pro", "wyższa jakość", "lepiej" | `nano-banana-pro` |
 
-**GPT Image-2 ograniczenia:** brak `--resolution` i `--format` (skrypt je ignoruje), krótsza lista ratio (bez 1:4, 1:8, 4:1, 8:1). Jeśli user potrzebuje rozdzielczości lub formatu innego niż domyślne — przełącz na `nano-banana-2`.
+**GPT Image 2.5 ograniczenia:** brak `--format` (API go ignoruje), krótsza lista ratio (bez 1:4, 1:8, 4:1, 8:1). `--resolution` 1K/2K/4K działa (cennik: 1K $0.03, 2K $0.05, 4K $0.08). Skrypt sprawdza magic bytes odpowiedzi: przy rozjeździe bezpiecznie zmienia rozszerzenie, a z `--strict-format` przerywa bez zapisu. Jeśli format ma być gwarantowany (np. PNG do dalszego kroku), przełącz na `nano-banana-2` i użyj `--strict-format`.
 
 ## Wymagania
 
@@ -75,16 +76,16 @@ Biblioteki Python: `requests`.
 > ```
 
 ```bash
-# Generate (text → image) — domyślnie GPT Image-2
+# Generate (text → image) — domyślnie GPT Image 2.5
 $PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png
-$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --ratio 16:9 --resolution 2K
+$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --ratio 16:9 --resolution 2K --task-file task.json
 
 # Generate z Nano Banana Pro (starszy model)
 $PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --model nano-banana-pro
 
-# Generate / edit z GPT Image-2 (skrypt sam wybiera text-to-image vs image-to-image)
-$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --model gpt-image-2 --ratio 16:9
-$PYTHON {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png --model gpt-image-2
+# Generate / edit z GPT Image 2.5 (skrypt sam wybiera text-to-image vs image-to-image)
+$PYTHON {baseDir}/scripts/kie_image.py generate "prompt" output.png --model gpt-image-2.5 --ratio 16:9 --resolution 2K
+$PYTHON {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png --model gpt-image-2.5
 
 # Edit (image + instruction → image)
 $PYTHON {baseDir}/scripts/kie_image.py edit "instruction" output.png --image input.png
@@ -94,19 +95,25 @@ $PYTHON {baseDir}/scripts/kie_image.py compose "instruction" output.png --image 
 
 # Remove background
 $PYTHON {baseDir}/scripts/kie_image.py remove-bg input.png output.png
+
+# Odzysk obrazu po przerwanym pollingu — nie tworzy drugiego taska
+$PYTHON {baseDir}/scripts/kie_image.py recover <task_id> output.png
+$PYTHON {baseDir}/scripts/kie_image.py recover --task-file task.json
 ```
 
 ## Parametry
 
 | Parametr | Opcje | Domyślnie |
 |----------|-------|-----------|
-| `--model` | nano-banana-2, nano-banana-pro, gpt-image-2 | gpt-image-2 |
+| `--model` | nano-banana-2, nano-banana-pro, gpt-image-2.5 (Sunburst), gpt-image-2.5-flare | gpt-image-2.5 |
 | `--ratio` | 1:1, 1:4*, 1:8*, 2:3, 3:2, 3:4, 4:1*, 4:3, 4:5, 5:4, 8:1*, 9:16, 16:9, 21:9, auto | 1:1 |
 | `--resolution` | 1K, 2K, 4K | 1K |
 | `--format` | png, jpg | png |
+| `--task-file` | ścieżka JSON; atomowy zapis task_id przed pollingiem | brak |
+| `--strict-format` | przerwij bez zapisu, gdy magic bytes ≠ rozszerzenie | off |
 
 *\* Proporcje 1:4, 1:8, 4:1, 8:1 — dostępne tylko w Nano Banana 2*
-*\* GPT Image-2 ignoruje `--resolution` i `--format`; ratio musi być z listy: auto, 1:1, 5:4, 9:16, 21:9, 16:9, 4:3, 3:2, 4:5, 3:4, 2:3*
+*\* GPT Image 2.5 ignoruje `--format`; ratio musi być z listy: auto, 1:1, 5:4, 9:16, 21:9, 16:9, 4:3, 3:2, 4:5, 3:4, 2:3*
 
 ## Proporcje - kiedy które
 
@@ -125,7 +132,7 @@ Zapisuj do `Marketing/media/` z opisową nazwą:
 
 ## Jak działa upload reference images
 
-Dla trybów `edit`, `compose`, `remove-bg` Kie.ai wymaga publicznego URL-a dla inputowych obrazków. Skrypt uploaduje plik do **ImgBB** (TTL 1h, auto-delete), dostaje publiczny URL i przekazuje go do API. Limit: **32 MB** na plik. Retry 3× z exponential backoff przy błędach 5xx/sieci.
+Dla trybów `edit`, `compose`, `remove-bg` Kie.ai wymaga publicznego URL-a dla inputowych obrazków. Skrypt uploaduje plik do **ImgBB** (TTL 1h, auto-delete), dostaje publiczny URL i przekazuje go do API. Limit: **32 MB** na plik. Retry 3× z exponential backoff przy błędach 5xx/sieci. Tryb `generate` nie używa ImgBB i nie wymaga `IMGBB_API_KEY`.
 
 ## Obsługa błędów
 
@@ -199,12 +206,13 @@ $PYTHON {baseDir}/scripts/kie_video.py generate "prompt sceny" out.mp4 --model s
 $PYTHON {baseDir}/scripts/kie_video.py generate "prompt sceny" out.mp4 --model seedance25 --duration 20
 
 # Image → video: first frame + opcjonalny end frame
-$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --first frame.png
-$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --first start.png --end koniec.png
+$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --first frame.png --aspect-ratio 16:9 --task-file video-task.json
+$PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --first start.png --end koniec.png --aspect-ratio 1:1
 $PYTHON {baseDir}/scripts/kie_video.py image-to-video "opis ruchu" out.mp4 --model minimax --first start.png --resolution 2K
 
 # Odzysk po przerwanym pollingu (NIE płacisz drugi raz)
 $PYTHON {baseDir}/scripts/kie_video.py recover <task_id> out.mp4
+$PYTHON {baseDir}/scripts/kie_video.py recover --task-file video-task.json
 ```
 
 ### Parametry wideo
@@ -217,10 +225,11 @@ $PYTHON {baseDir}/scripts/kie_video.py recover <task_id> out.mp4
 | `--resolution` | Seedance 2.0: 480p/720p/1080p/4k · Seedance 2.5: 480p/720p · MiniMax: 768P/2K | 720p / 2K |
 | `--mode` | **tylko Kling:** std (720p), pro (1080p), 4K | std |
 | `--sound` | flaga — Kling i oba Seedance (MiniMax nie generuje dźwięku) | off |
+| `--task-file` | atomowy JSON z task_id zapisany przed pollingiem | brak |
 
 ### Jak działa image_urls (first / end frame)
 
-W trybie single-shot: `--first` = klatka początkowa (index 0), `--end` = klatka końcowa (index 1). Przy podanych obrazach Kling auto-adaptuje kadr z klatki, więc `--aspect-ratio` jest miękką sugestią. Obrazy: **JPG/PNG, max 10 MB**. Plik z rozszerzeniem `.png`, który w środku jest WebP (RIFF), jest automatycznie konwertowany ffmpeg-iem do prawdziwego PNG z zachowaniem alpha.
+W trybie single-shot: `--first` = klatka początkowa (index 0), `--end` = klatka końcowa (index 1). Dla image-to-video podaj jawne `--aspect-ratio` (wyjątek: MiniMax, który bierze kadr z klatki); skrypt nie zgaduje 1:1. Obrazy: **prawdziwy JPG/PNG**, limit zależy od silnika. Plik WebP podszywający się pod `.png` jest odrzucany przed płatnym taskiem — skrypt nie instaluje ani nie zakłada `ffmpeg`.
 
 ### Główny use case: animacja pixel-art (seamless loop)
 
@@ -234,7 +243,7 @@ $PYTHON {baseDir}/scripts/kie_video.py image-to-video \
 
 ### Ważne o wideo
 
-- **Rendery są WOLNE.** Polling ma budżet 40 min. `task_id` leci na stdout NATYCHMIAST po createTask (linia `>>> RECOVERY: ...`) — jeśli proces padnie, odzyskaj wynik komendą `recover` bez ponownej płatności.
+- **Rendery są WOLNE.** Polling ma budżet 40 min. Z `--task-file` task_id jest zapisany atomowo NATYCHMIAST po createTask i przed pollingiem; stdout nadal pokazuje `>>> RECOVERY`. Po przerwaniu użyj `recover`, nigdy ponownego `generate`.
 - **Ceny (orientacyjnie):** std ~27 kredytów/s, 4K ~30 kredytów/s → wideo 5s std ≈ 135 kredytów. Nieudane taski nie zjadają kredytów.
 - Uruchamiaj generację wideo w tle (`run_in_background`) albo z dużym timeoutem — nie blokuj sesji na 40 min.
 

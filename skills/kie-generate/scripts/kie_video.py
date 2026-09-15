@@ -4,8 +4,9 @@ Kie.ai Video Generator - Kling 3.0 / Seedance 2.0 / Seedance 2.5 / MiniMax H3
 
 Ten sam flow co kie_image.py: createTask -> polling recordInfo -> download.
 Różnica: rendery wideo są WOLNE (znany case obrazów: 13 min; wideo bywa dłuższe),
-więc polling ma budżet 40 min, a taskId leci na stdout NATYCHMIAST po createTask —
-gdyby proces padł/przerwał się, wynik odzyskasz komendą `recover` bez płacenia drugi raz.
+więc polling ma budżet 40 min. Z `--task-file` taskId jest zapisany
+atomowo NATYCHMIAST po createTask i przed pollingiem; stdout też go pokazuje.
+Po przerwaniu wynik odzyskasz komendą `recover` bez płacenia drugi raz.
 
 Upload lokalnych obrazów idzie przez natywny endpoint plików kie.ai (redpandaai.co),
 nie ImgBB — nie trzeba osobnego klucza, plik żyje 24h i jest widoczny dla API.
@@ -23,8 +24,8 @@ Usage:
     python kie_video.py generate "prompt" out.mp4 --model seedance --duration 5 --resolution 1080p
 
     # Image -> video (first frame + opcjonalny end frame)
-    python kie_video.py image-to-video "camera slowly zooms in" out.mp4 --first frame.png
-    python kie_video.py image-to-video "seamless idle loop" out.mp4 --first egg.png --end egg.png --duration 5
+    python kie_video.py image-to-video "camera slowly zooms in" out.mp4 --first frame.png --aspect-ratio 16:9
+    python kie_video.py image-to-video "seamless idle loop" out.mp4 --first egg.png --end egg.png --duration 5 --aspect-ratio 1:1
 
     # Ten sam prompt na trzech silnikach (porównanie)
     for M in kling seedance minimax; do
@@ -44,7 +45,6 @@ Examples:
 import argparse
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -216,6 +216,8 @@ def validate_engine_args(engine_key: str, duration, resolution, aspect_ratio, mo
         raise Exception(f"{e['label']} nie przyjmuje --mode — użyj --resolution ({'/'.join(e['resolutions'])})")
     if sound and not e["supports_sound"]:
         raise Exception(f"{e['label']} nie generuje dźwięku — pomiń --sound")
+    if has_images and engine_key != "minimax" and not aspect_ratio:
+        raise Exception(f"{e['label']} image-to-video wymaga jawnego --aspect-ratio; nie zgaduję 1:1")
     if aspect_ratio:
         if engine_key == "minimax" and has_images:
             raise Exception("MiniMax H3 image-to-video nie przyjmuje aspect_ratio — kadr bierze się z klatki")
@@ -245,7 +247,7 @@ def prepare_image(local_path: str, max_mb: int = 10) -> str:
 
     Limity są per silnik (Kling/Seedance 10 MB, MiniMax 30 MB). Realny przypadek
     z projektu: plik z rozszerzeniem .png, który wewnątrz jest WebP (RIFF) — API by go
-    odrzuciło. Konwertujemy ffmpeg-iem do prawdziwego PNG z zachowaniem kanału alpha.
+    odrzuciło. Przerywamy przed płatnym taskiem; konwersja musi być jawna i lokalna.
     """
     if not os.path.exists(local_path):
         raise Exception(f"Image not found: {local_path}")
@@ -260,18 +262,10 @@ def prepare_image(local_path: str, max_mb: int = 10) -> str:
         return local_path
 
     if fmt == "webp":
-        converted = os.path.join(tempfile.gettempdir(), Path(local_path).stem + "_real.png")
-        print(f"  {os.path.basename(local_path)} to w rzeczywistości WebP — konwersja do PNG (alpha)...")
-        try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", local_path, "-pix_fmt", "rgba", converted],
-                check=True, capture_output=True, text=True
-            )
-        except FileNotFoundError:
-            raise Exception("ffmpeg nie znaleziony — potrzebny do konwersji WebP->PNG")
-        except subprocess.CalledProcessError as e:
-            raise Exception(f"Konwersja WebP->PNG nie powiodła się: {e.stderr[-400:]}")
-        return converted
+        raise Exception(
+            f"{os.path.basename(local_path)} to WebP niezależnie od rozszerzenia. "
+            "API przyjmuje JPG/PNG; przekonwertuj lokalnie przed płatnym taskiem."
+        )
 
     raise Exception(f"Nieobsługiwany format obrazu ({fmt}). API przyjmuje JPG/PNG.")
 
@@ -341,6 +335,44 @@ def build_video_payload(engine_key: str, prompt: str, image_urls: list, duration
     })
 
 
+def write_task_file(path: str, payload: dict):
+    """Zapisz stan odzysku atomowo przed pierwszym pollingiem."""
+    if not path:
+        return
+    target = Path(path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=str(target.parent), text=True)
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def read_task_file(path: str) -> dict:
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not data.get("task_id") or not data.get("output"):
+        raise Exception(f"Task file bez task_id/output: {path}")
+    return data
+
+
 def create_video_task(payload: dict) -> str:
     """Utwórz task generacji wideo, zwróć taskId."""
     response = requests.post(
@@ -354,7 +386,11 @@ def create_video_task(payload: dict) -> str:
         raise Exception(f"API error {response.status_code}: {response.text}")
 
     data = response.json()
-    if "data" not in data or "taskId" not in data["data"]:
+    # kie.ai odpowiada HTTP 200 nawet na błąd — prawdziwy kod i powód siedzą w body.
+    # Bez tego brak `data` kończył się nieczytelnym TypeError zamiast komunikatu API.
+    if not data.get("data"):
+        raise Exception(f"API error {data.get('code')}: {data.get('msg')}")
+    if "taskId" not in data["data"]:
         raise Exception(f"Unexpected response: {data}")
 
     return data["data"]["taskId"]
@@ -393,13 +429,34 @@ def poll_video_task(task_id: str, max_attempts: int = POLL_MAX_ATTEMPTS) -> dict
 
 
 def download_file(url: str, output_path: str):
-    """Pobierz plik (wideo) i zapisz lokalnie — strumieniowo, bo mp4 bywa duży."""
+    """Pobierz MP4 strumieniowo i atomowo; odrzuć odpowiedź niebędącą MP4."""
     response = requests.get(url, stream=True, timeout=300)
     if response.status_code != 200:
         raise Exception(f"Download error {response.status_code}")
-    with open(output_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=1 << 16):
-            f.write(chunk)
+    target = Path(output_path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=str(target.parent))
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=1 << 16):
+                handle.write(chunk)
+            handle.flush()
+            os.fsync(handle.fileno())
+        with open(temporary, "rb") as handle:
+            head = handle.read(12)
+        if len(head) < 12 or head[4:8] != b"ftyp":
+            raise Exception("Downloaded result is not an MP4 file (missing ftyp magic)")
+        os.replace(temporary, target)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
 
 
 def download_result(result: dict, output: str):
@@ -413,7 +470,8 @@ def download_result(result: dict, output: str):
 
 
 def run_video_generation(engine_key: str, prompt: str, output: str, image_paths: list, duration,
-                         aspect_ratio: str, resolution: str, mode: str, sound: bool):
+                         aspect_ratio: str, resolution: str, mode: str, sound: bool,
+                         task_file: str = None):
     """Wspólna logika generacji — walidacja, przygotuj klatki, upload, task, polling, download."""
     engine = ENGINES[engine_key]
     validate_engine_args(engine_key, duration, resolution, aspect_ratio, mode, sound, bool(image_paths))
@@ -437,19 +495,46 @@ def run_video_generation(engine_key: str, prompt: str, output: str, image_paths:
         print(f"  Reference images: {len(image_urls)} ({roles})")
 
     task_id = create_video_task(payload)
-    # Kluczowe: taskId od razu na stdout — ratunek gdyby polling się urwał.
+    task_state = {
+        "schema": 1,
+        "kind": "video",
+        "task_id": task_id,
+        "output": str(Path(output).resolve()),
+        "engine": engine_key,
+        "model": payload["model"],
+        "duration": int(duration),
+        "aspect_ratio": aspect_ratio,
+        "state": "created",
+        "created_at": int(time.time()),
+    }
+    write_task_file(task_file, task_state)
+    # Task file jest trwalszy niż sam stdout i powstaje przed pollingiem.
     print(f"  Task ID: {task_id}")
     print(f"  >>> RECOVERY: kie_video.py recover {task_id} {output}")
+    if task_file:
+        print(f"  Recovery state: {task_file}")
 
     result = poll_video_task(task_id)
     download_result(result, output)
+    task_state["state"] = "downloaded"
+    write_task_file(task_file, task_state)
 
 
-def recover(task_id: str, output: str):
+def recover(task_id: str, output: str, task_file: str = None):
     """Odzyskaj gotowy (lub renderujący się) wynik po task_id."""
+    state = None
+    if task_file:
+        state = read_task_file(task_file)
+        task_id = task_id or state["task_id"]
+        output = output or state["output"]
+    if not task_id or not output:
+        raise Exception("recover wymaga task_id i output albo kompletnego --task-file")
     print(f"Sprawdzam task {task_id}...")
     result = poll_video_task(task_id)
     download_result(result, output)
+    if task_file:
+        state["state"] = "downloaded"
+        write_task_file(task_file, state)
 
 
 def add_common_video_args(sub, default_aspect=None):
@@ -462,6 +547,7 @@ def add_common_video_args(sub, default_aspect=None):
                      help="Seedance 2.0: 480p/720p/1080p/4k · Seedance 2.5: 480p/720p · MiniMax: 768P/2K (Kling używa --mode)")
     sub.add_argument("--mode", default=None, choices=MODES, help="TYLKO Kling: std/pro/4K (default: std)")
     sub.add_argument("--sound", action="store_true", help="Dźwięk — Kling i Seedance (default: off)")
+    sub.add_argument("--task-file", help="Atomic recovery-state JSON written before polling")
 
 
 def main():
@@ -492,8 +578,9 @@ def main():
 
     # recover
     rec = subparsers.add_parser("recover", help="Odzyskaj wynik po task_id")
-    rec.add_argument("task_id", help="Task ID z wcześniejszego createTask")
-    rec.add_argument("output", help="Output .mp4 path")
+    rec.add_argument("task_id", nargs="?", help="Task ID (opcjonalny z --task-file)")
+    rec.add_argument("output", nargs="?", help="Output .mp4 (opcjonalny z --task-file)")
+    rec.add_argument("--task-file", help="Recovery-state JSON from generate/image-to-video")
 
     args = parser.parse_args()
 
@@ -511,7 +598,7 @@ def main():
         return
 
     if args.mode_cmd == "recover":
-        recover(args.task_id, args.output)
+        recover(args.task_id, args.output, args.task_file)
         return
 
     if args.mode_cmd == "image-to-video":
@@ -523,7 +610,8 @@ def main():
 
     run_video_generation(
         args.engine, args.prompt, args.output, image_paths,
-        args.duration, args.aspect_ratio, args.resolution, args.mode, args.sound
+        args.duration, args.aspect_ratio, args.resolution, args.mode, args.sound,
+        args.task_file
     )
 
 

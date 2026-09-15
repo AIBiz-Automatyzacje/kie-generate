@@ -22,7 +22,9 @@ python3 --version
 
 - Jeśli wersja ≥ 3.8 → ✅ "Python OK: {wersja}"
 - Jeśli brak `python3` lub starsza → poinformuj usera:
-  - **Mac:** `brew install python3`
+  - **Mac:** instalator `.pkg` z python.org (GUI). Jeśli Homebrew już
+    istnieje i user woli tę drogę, alternatywnie `brew install python3`;
+    nie zakładaj ani nie instaluj Homebrew tylko dla tego skilla
   - **Windows:** pobierz z python.org, zaznacz "Add to PATH" przy instalacji
   - **Linux:** `sudo apt install python3` (Debian/Ubuntu) lub odpowiednik
 - Po instalacji user musi **restartnąć terminal**, potem re-run onboardingu
@@ -91,6 +93,10 @@ Zapisz plik. Daj znać jak skończysz — sprawdzę czy klucz jest na miejscu.
 
 ### 5. `IMGBB_API_KEY`
 
+Najpierw zapytaj, czy user chce używać `edit`, `compose` albo
+`remove-bg`. Jeśli potrzebuje tylko `generate` i wideo → pomiń cały krok;
+te tryby nie wymagają ImgBB.
+
 **Check:**
 ```bash
 grep -qE "^IMGBB_API_KEY=.+" .env && echo "SET" || echo "MISSING"
@@ -118,7 +124,7 @@ Zapisz plik. Daj znać jak skończysz.
 
 **Check:**
 ```bash
-test -f .claude/skills/kie-generate/brand-rules.md && head -1 .claude/skills/kie-generate/brand-rules.md
+test -f {baseDir}/brand-rules.md && head -1 {baseDir}/brand-rules.md
 ```
 
 - Jeśli plik istnieje i pierwsza linia zawiera "Akademia Automatyzacji" → plik ma domyślny brand AA
@@ -160,7 +166,7 @@ Chcesz skonfigurować własny brand? [tak/nie/pokaż obecny]
 - Po zebraniu odpowiedzi:
   1. Wygeneruj `brand-rules.md` w strukturze zbliżonej do obecnego pliku AA (sekcje: Kolory, Typografia, Styl wizualny, Logo, Czego unikać)
   2. **Pokaż userowi draft przed zapisem** — "Oto twój brand-rules.md. Zapisać czy coś poprawić?"
-  3. Po akceptacji → nadpisz `.claude/skills/kie-generate/brand-rules.md`
+  3. Po akceptacji → nadpisz `{baseDir}/brand-rules.md`
 
 - Jeśli user wybierze "nie" / "pokaż" → odpowiednio zostaw lub wyświetl `brand-rules.md`
 
@@ -192,7 +198,7 @@ Wyświetl userowi finalny status:
 
 Co masz skonfigurowane:
 - Python {wersja} + requests {wersja}
-- Plik .env z kluczami KIE_API_KEY i IMGBB_API_KEY
+- Plik .env z KIE_API_KEY{ oraz IMGBB_API_KEY, jeśli wybrano edit/compose/remove-bg}
 - Brand: {nazwa_brandu lub "domyślny AA"}
 - Domyślny output: {ścieżka}
 
@@ -202,7 +208,7 @@ Pierwszy test — powiedz po prostu:
 Jeśli coś nie zadziała przy pierwszym użyciu:
 - 401 → sprawdź KIE_API_KEY (typo, spacja, cudzysłów w .env)
 - 402 → doładuj konto Kie.ai
-- IMGBB error → sprawdź IMGBB_API_KEY
+- IMGBB error (tylko edit/compose/remove-bg) → sprawdź IMGBB_API_KEY
 ```
 
 ## Obsługa błędów podczas onboardingu

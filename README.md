@@ -2,7 +2,8 @@
 
 Skill dla Claude Code do generowania grafik i wideo AI przez [Kie.ai](https://kie.ai).
 
-- **Grafiki** (Nano Banana 2 / Nano Banana Pro / GPT Image-2) — generowanie od zera, edycja, kompozycja, usuwanie tła
+- **Grafiki** (GPT Image 2.5 Sunburst domyślnie, GPT Image 2.5 Flare jako szybszy wariant, Nano Banana 2 / Nano Banana Pro) — generowanie od zera, edycja, kompozycja, usuwanie tła
+- **Odzysk po przerwaniu** — `--task-file` zapisuje id zadania przed odpytywaniem, komenda `recover` ściąga gotowy wynik bez płacenia drugi raz
 - **Wideo** (Kling 3.0 / Seedance 2.0 / Seedance 2.5 / MiniMax H3) — text-to-video, image-to-video z klatką początkową i końcową, seamless loopy
 
 ## Instalacja
@@ -59,10 +60,11 @@ skills/kie-generate/
 ├── ONBOARDING.md      # kroki konfiguracji (prowadzi Claude)
 ├── prompting-guide.md # zasady tworzenia promptów
 ├── brand-rules.md     # przykład — nadpisywany w onboardingu
-└── scripts/
-    ├── env_loader.py  # loader .env
-    ├── kie_image.py   # CLI do grafik
-    └── kie_video.py   # CLI do wideo
+├── scripts/
+│   ├── env_loader.py  # loader .env
+│   ├── kie_image.py   # CLI do grafik
+│   └── kie_video.py   # CLI do wideo
+└── tests/             # testy jednostkowe (python3 -m unittest discover -s tests)
 ```
 
 ## Wymagania
